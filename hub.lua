@@ -1,10 +1,5 @@
 -- [[ Rscripts Risk Notice ]]
--- This script is not verified by rscripts.net. Deal with caution.
---
--- Stay safe:
---   • Never log in on unofficial Roblox sites or lookalike domains.
---   • Real Roblox links use roblox.com (check the .com ending).
---   • Treat fake Roblox login / "claim reward" pages as phishing.
+-- Updated for Shindo Life [249]
 -- [[ End Rscripts Risk Notice ]]
 
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
@@ -12,8 +7,8 @@ local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/d
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "Shindo Life - All-In-One Hub",
-    SubTitle = "Auto Spin, Boss Farm & Auto Quests",
+    Title = "Shindo Life [249] - Fixed Hub",
+    SubTitle = "Working Auto Quests & Farm",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -23,22 +18,32 @@ local Window = Fluent:CreateWindow({
 
 local Tabs = {
     Main = Window:AddTab({ Title = "Main Spin", Icon = "rotate-cw" }),
-    Boss = Window:AddTab({ Title = "Boss Farm", Icon = "swords" }),
     Auto = Window:AddTab({ Title = "Automations", Icon = "bot" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
-local Options = Fluent.Options
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local TeleportService = game:GetService("TeleportService")
+local TweenService = game:GetService("TweenService")
 
--- Variables
-local elementwanted = {}
-local slots = {"kg1", "kg2", "kg3", "kg4"}
-local autoSpinEnabled = false
+-- Helpers
+local function getStartEvent()
+    return LocalPlayer:FindFirstChild("startevent") or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("startevent"))
+end
 
--- Automation Toggles
+local function safeTeleport(targetCFrame)
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        local distance = (hrp.Position - targetCFrame.Position).Magnitude
+        local speed = 300 -- سرعة طيران آمنة لمنع الكيك
+        local info = TweenInfo.new(distance / speed, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(hrp, info, {CFrame = targetCFrame})
+        tween:Play()
+        return tween
+    end
+end
+
+-- Automation Flags
 local autoGreenQuest = false
 local autoBossQuest = false
 local autoScroll = false
@@ -46,36 +51,26 @@ local autoDaily = false
 local autoStats = false
 local autoRankUp = false
 
--- Function to get element names
-local function getElementNames()
-    local bossTab = LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main.ingame.Menu.BossTab
-    if bossTab then
-        local elements = {}
-        for _, frame in pairs(bossTab:GetChildren()) do
-            if frame:IsA("Frame") and frame.Name then
-                table.insert(elements, frame.Name)
-            end
-        end
-        return elements
-    end
-    return {"boil", "lightning", "fire", "ice", "sand", "crystal", "explosion"}
-end
-
 ----------------------------------------------------------------
 -- 1. Auto Green Quest
 ----------------------------------------------------------------
 task.spawn(function()
-    while task.wait(1) do
+    while task.wait(1.5) do
         if autoGreenQuest then
             pcall(function()
-                -- البحث عن مهمات خضراء في الـ Workspace واستلامها
-                for _, quest in pairs(workspace:GetChildren()) do
-                    if quest:FindFirstChild("Mission") and quest.Mission.Value == "Green" then
-                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                            LocalPlayer.Character.HumanoidRootPart.CFrame = quest.CFrame
-                            task.wait(0.5)
-                            if LocalPlayer:FindFirstChild("startevent") then
-                                LocalPlayer.startevent:FireServer("acceptmission", quest)
+                local event = getStartEvent()
+                if not event then return end
+
+                for _, folder in pairs(workspace:GetChildren()) do
+                    if folder.Name == "Missions" or folder:FindFirstChild("Mission") then
+                        for _, quest in pairs(folder:GetChildren()) do
+                            if quest:FindFirstChild("Head") and quest:FindFirstChild("Talk") then
+                                safeTeleport(quest.Head.CFrame)
+                                task.wait(1)
+                                fireclickdetector(quest.Talk.ClickDetector)
+                                task.wait(0.5)
+                                event:FireServer("acceptmission")
+                                break
                             end
                         end
                     end
@@ -86,15 +81,15 @@ task.spawn(function()
 end)
 
 ----------------------------------------------------------------
--- 2. Auto Boss Quest Farm
+-- 2. Auto Boss Quest
 ----------------------------------------------------------------
 task.spawn(function()
-    while task.wait(1) do
+    while task.wait(2) do
         if autoBossQuest then
             pcall(function()
-                -- قبول مهمات البوس والذهاب لهدف القتل
-                if LocalPlayer:FindFirstChild("startevent") then
-                    LocalPlayer.startevent:FireServer("acceptbossmission")
+                local event = getStartEvent()
+                if event then
+                    event:FireServer("acceptbossmission")
                 end
             end)
         end
@@ -105,15 +100,17 @@ end)
 -- 3. Auto Scroll Collector
 ----------------------------------------------------------------
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(1) do
         if autoScroll then
             pcall(function()
                 for _, obj in pairs(workspace:GetChildren()) do
-                    if obj:FindFirstChild("Scroll") or (obj:IsA("Model") and obj.Name:lower():find("scroll")) then
-                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                            LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame()
-                            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, obj:FindFirstChildWhichIsA("BasePart"), 0)
-                            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, obj:FindFirstChildWhichIsA("BasePart"), 1)
+                    if obj.Name == "Scroll" or obj:FindFirstChild("Scroll") or obj.Name:lower():find("scroll") then
+                        local part = obj:FindFirstChildWhichIsA("BasePart") or obj
+                        if part then
+                            local tw = safeTeleport(part.CFrame)
+                            if tw then tw.Completed:Wait() end
+                            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, part, 0)
+                            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, part, 1)
                         end
                     end
                 end
@@ -129,8 +126,9 @@ task.spawn(function()
     while task.wait(5) do
         if autoDaily then
             pcall(function()
-                if LocalPlayer:FindFirstChild("startevent") then
-                    LocalPlayer.startevent:FireServer("dailyreward")
+                local event = getStartEvent()
+                if event then
+                    event:FireServer("dailyreward")
                 end
             end)
         end
@@ -138,16 +136,17 @@ task.spawn(function()
 end)
 
 ----------------------------------------------------------------
--- 5. Auto Stats (توزيع نقاط اللفل تلقائياً)
+-- 5. Auto Add Stats
 ----------------------------------------------------------------
 task.spawn(function()
     while task.wait(1) do
         if autoStats then
             pcall(function()
-                if LocalPlayer:FindFirstChild("startevent") and LocalPlayer:FindFirstChild("statz") then
-                    local statTypes = {"ninjutsu", "taiJutsu", "chi", "health"}
-                    for _, stat in pairs(statTypes) do
-                        LocalPlayer.startevent:FireServer("stat", stat, 100)
+                local event = getStartEvent()
+                if event then
+                    local stats = {"ninjutsu", "taiJutsu", "chi", "health"}
+                    for _, stat in pairs(stats) do
+                        event:FireServer("stat", stat, 50)
                     end
                 end
             end)
@@ -159,14 +158,14 @@ end)
 -- 6. Auto Rank Up
 ----------------------------------------------------------------
 task.spawn(function()
-    while task.wait(2) do
+    while task.wait(3) do
         if autoRankUp then
             pcall(function()
-                if LocalPlayer:FindFirstChild("statz") and LocalPlayer.statz:FindFirstChild("lvl") then
-                    if LocalPlayer.statz.lvl.Value >= 1000 then
-                        if LocalPlayer:FindFirstChild("startevent") then
-                            LocalPlayer.startevent:FireServer("rankup")
-                        end
+                local statz = LocalPlayer:FindFirstChild("statz")
+                local event = getStartEvent()
+                if statz and statz:FindFirstChild("lvl") and event then
+                    if statz.lvl.Value >= 1000 then
+                        event:FireServer("rankup")
                     end
                 end
             end)
@@ -175,92 +174,46 @@ task.spawn(function()
 end)
 
 ----------------------------------------------------------------
--- UI CONFIGURATION (FLUENT)
+-- UI SETUP
 ----------------------------------------------------------------
 do
-    -- --- MAIN TAB (SPIN) ---
-    local availableElements = getElementNames()
-    
-    local ElementDropdown = Tabs.Main:AddDropdown("ElementDropdown", {
-        Title = "Select Bloodlines",
-        Values = availableElements,
-        Multi = true,
-        Default = {},
-    })
-    
-    ElementDropdown:OnChanged(function(Value)
-        elementwanted = {}
-        for element, state in next, Value do
-            if state then table.insert(elementwanted, element) end
-        end
-    end)
-    
-    local SlotDropdown = Tabs.Main:AddDropdown("SlotDropdown", {
-        Title = "Select Slots",
-        Values = slots,
-        Multi = true,
-        Default = {"kg1", "kg2"},
-    })
-    
-    SlotDropdown:OnChanged(function(Value)
-        slots = {}
-        for slot, state in next, Value do
-            if state then table.insert(slots, slot) end
-        end
-    end)
-    
-    Tabs.Main:AddToggle("AutoSpinToggle", {
-        Title = "Auto Spin",
-        Default = false
-    }):OnChanged(function(Value)
-        autoSpinEnabled = Value
-    end)
-
-    -- --- AUTOMATIONS TAB ---
     Tabs.Auto:AddToggle("AutoGreenQuestToggle", {
         Title = "Auto Green Quest Farm",
-        Description = "Automatically accept and farm green quests",
         Default = false
     }):OnChanged(function(Value) autoGreenQuest = Value end)
 
     Tabs.Auto:AddToggle("AutoBossQuestToggle", {
         Title = "Auto Boss Quest Farm",
-        Description = "Automatically accept and complete boss quests",
         Default = false
     }):OnChanged(function(Value) autoBossQuest = Value end)
 
     Tabs.Auto:AddToggle("AutoScrollToggle", {
         Title = "Auto Scroll Collector",
-        Description = "Teleport to spawned scrolls in the server",
         Default = false
     }):OnChanged(function(Value) autoScroll = Value end)
 
     Tabs.Auto:AddToggle("AutoDailyToggle", {
         Title = "Auto Daily Collect",
-        Description = "Collect daily rewards automatically",
         Default = false
     }):OnChanged(function(Value) autoDaily = Value end)
 
     Tabs.Auto:AddToggle("AutoStatsToggle", {
         Title = "Auto Add Stats",
-        Description = "Automatically upgrade all stats when leveling up",
         Default = false
     }):OnChanged(function(Value) autoStats = Value end)
 
     Tabs.Auto:AddToggle("AutoRankToggle", {
         Title = "Auto Rank Up",
-        Description = "Automatically ranks up when reaching level 1000",
         Default = false
     }):OnChanged(function(Value) autoRankUp = Value end)
 end
 
--- Addons & Setup
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({})
-InterfaceManager:SetFolder("ShindoLifeHub")
-SaveManager:SetFolder("ShindoLifeHub/config")
+InterfaceManager:SetFolder("ShindoFix249")
+SaveManager:SetFolder("ShindoFix249/config")
 
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
@@ -268,9 +221,7 @@ SaveManager:BuildConfigSection(Tabs.Settings)
 Window:SelectTab(1)
 
 Fluent:Notify({
-    Title = "Shindo Life Hub",
-    Content = "Script loaded successfully with all Auto-Farm features!",
+    Title = "Shindo Life [249]",
+    Content = "Script is fixed & ready!",
     Duration = 5
 })
-
-SaveManager:LoadAutoloadConfig()
