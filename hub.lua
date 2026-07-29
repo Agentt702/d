@@ -11,8 +11,8 @@ local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/d
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "Infinite Spin - Shindo Life",
-    SubTitle = "Auto spin for bloodlines",
+    Title = "Infinite Spin & Boss Farm - Shindo Life",
+    SubTitle = "Auto spin and boss farmer",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -22,6 +22,7 @@ local Window = Fluent:CreateWindow({
 
 local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    Boss = Window:AddTab({ Title = "Boss Farm", Icon = "swords" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
@@ -32,6 +33,11 @@ local tpsrv = game:GetService("TeleportService")
 local elementwanted = {}
 local slots = {"kg1", "kg2", "kg3", "kg4"}
 local autoSpinEnabled = false
+
+-- Boss Farm Variables
+local autoBossEnabled = false
+local selectedBoss = "All Bosses"
+local bossList = {"All Bosses", "Tails", "Sengoku", "Reaper", "Jokei", "Borumki"} -- أمثلة لبعض زعماء شيندو
 
 -- Function to get all element names from BossTab
 local function getElementNames()
@@ -63,15 +69,11 @@ local function startAutoSpin()
     while autoSpinEnabled do
         task.wait(0.3)
         
-        print("Checking elements and spinning...")
-        
         -- Check if we got any desired elements
         for _, slot in pairs(slots) do
             if game:GetService("Players").LocalPlayer.statz.main[slot] and game:GetService("Players").LocalPlayer.statz.main[slot].Value then
                 local currentElement = game:GetService("Players").LocalPlayer.statz.main[slot].Value
-                print("Current element in " .. slot .. ": " .. currentElement)
                 
-                -- Check if this element is wanted
                 local isWanted = false
                 for _, element in pairs(elementwanted) do
                     if currentElement == element then
@@ -80,15 +82,6 @@ local function startAutoSpin()
                     end
                 end
                 
-                -- Show notification for each element
-                local wantedText = isWanted and "WANTED: TRUE" or "WANTED: FALSE"
-                Fluent:Notify({
-                    Title = slot:upper() .. " Spin Result",
-                    Content = "Got: " .. currentElement .. " | " .. wantedText,
-                    Duration = 2
-                })
-                
-                -- If we got what we want, stop and kick
                 if isWanted then
                     print("Got " .. currentElement .. " in " .. slot .. "!")
                     game:GetService("Players").LocalPlayer.startevent:FireServer("band", "Eye")
@@ -100,38 +93,55 @@ local function startAutoSpin()
         end
         
         -- Check if any slot has low spins
-        local lowSpins = false
         if game:GetService("Players").LocalPlayer.statz.spins and game:GetService("Players").LocalPlayer.statz.spins.Value <= 1 then
-            lowSpins = true
-        end
-        
-        if lowSpins then
-            print("Low spins detected, teleporting...")
             tpsrv:Teleport(game.PlaceId, game.Players.LocalPlayer)
         end
         
         -- Spin all slots
-        print("Spinning slots:", table.concat(slots, ", "))
         for _, slot in pairs(slots) do
             game:GetService("Players").LocalPlayer.startevent:FireServer("spin", slot)
         end
     end
-    
-    print("Auto spin stopped!")
 end
 
 -- Function to stop auto spin
 local function stopAutoSpin()
     autoSpinEnabled = false
     getgenv().atspn = false
-    print("Auto spin disabled")
+end
+
+-- Function for Boss Farming Loop
+local function startBossFarm()
+    print("Boss Farm started!")
+    while autoBossEnabled do
+        task.wait(1)
+        pcall(function()
+            local player = game:GetService("Players").LocalPlayer
+            local character = player.Character
+            if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+
+            -- البحث عن الزعماء في الـ Workspace أو مجلد الأعداء
+            for _, v in pairs(workspace:GetChildren()) do
+                if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
+                    if selectedBoss == "AllBosses" or v.Name == selectedBoss then
+                        -- الانتقال لموقع الزعيم وضربه
+                        character.HumanoidRootPart.CFrame = v.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
+                        
+                        -- إرسال ضربة أو استخدام حدث القتال الخاص باللعبة إذا توفر
+                        if player:FindFirstChild("startevent") then
+                            player.startevent:FireServer("mouse1", true)
+                        end
+                    end
+                end
+            end
+        end)
+    end
 end
 
 do
-    -- Get element names
+    -- --- MAIN TAB ---
     local availableElements = getElementNames()
     
-    -- Element selection dropdown
     local ElementDropdown = Tabs.Main:AddDropdown("ElementDropdown", {
         Title = "Select Bloodlines",
         Description = "Choose which bloodlines to auto-spin for",
@@ -147,10 +157,8 @@ do
                 table.insert(elementwanted, element)
             end
         end
-        print("Selected elements:", table.concat(elementwanted, ", "))
     end)
     
-    -- Slot selection dropdown
     local SlotDropdown = Tabs.Main:AddDropdown("SlotDropdown", {
         Title = "Select Slots",
         Description = "Choose which slots to spin",
@@ -166,10 +174,8 @@ do
                 table.insert(slots, slot)
             end
         end
-        print("Selected slots:", table.concat(slots, ", "))
     end)
     
-    -- Auto spin toggle
     local AutoSpinToggle = Tabs.Main:AddToggle("AutoSpinToggle", {
         Title = "Auto Spin",
         Description = "Automatically spin for selected bloodlines",
@@ -178,27 +184,16 @@ do
     
     AutoSpinToggle:OnChanged(function()
         autoSpinEnabled = Options.AutoSpinToggle.Value
-        print("Auto spin toggle changed to:", autoSpinEnabled)
-        
         if autoSpinEnabled then
             getgenv().atspn = true
-            Fluent:Notify({
-                Title = "Auto Spin",
-                Content = "Started auto spinning for selected bloodlines",
-                Duration = 3
-            })
+            Fluent:Notify({ Title = "Auto Spin", Content = "Started auto spinning", Duration = 3 })
             task.spawn(startAutoSpin)
         else
             stopAutoSpin()
-            Fluent:Notify({
-                Title = "Auto Spin",
-                Content = "Stopped auto spinning",
-                Duration = 3
-            })
+            Fluent:Notify({ Title = "Auto Spin", Content = "Stopped auto spinning", Duration = 3 })
         end
     end)
     
-    -- Manual spin button
     Tabs.Main:AddButton({
         Title = "Manual Spin",
         Description = "Spin once manually",
@@ -207,62 +202,57 @@ do
                 for _, slot in pairs(slots) do
                     game:GetService("Players").LocalPlayer.startevent:FireServer("spin", slot)
                 end
-                Fluent:Notify({
-                    Title = "Manual Spin",
-                    Content = "Spun all selected slots",
-                    Duration = 2
-                })
-            else
-                Fluent:Notify({
-                    Title = "Error",
-                    Content = "Game not loaded yet",
-                    Duration = 3
-                })
+                Fluent:Notify({ Title = "Manual Spin", Content = "Spun all selected slots", Duration = 2 })
             end
         end
     })
-    
-    -- Save stats button
-    Tabs.Main:AddButton({
-        Title = "Save Stats",
-        Description = "Save your current stats and progress",
+
+    -- --- BOSS TAB ---
+    local BossDropdown = Tabs.Boss:AddDropdown("BossDropdown", {
+        Title = "Select Boss",
+        Description = "Choose the boss you want to farm",
+        Values = bossList,
+        Multi = false,
+        Default = 1,
+    })
+
+    BossDropdown:OnChanged(function(Value)
+        selectedBoss = Value
+    end)
+
+    local AutoBossToggle = Tabs.Boss:AddToggle("AutoBossToggle", {
+        Title = "Auto Farm Boss",
+        Description = "Automatically teleport to and attack the selected boss",
+        Default = false
+    })
+
+    AutoBossToggle:OnChanged(function()
+        autoBossEnabled = Options.AutoBossToggle.Value
+        if autoBossEnabled then
+            Fluent:Notify({ Title = "Boss Farm", Content = "Started boss farming", Duration = 3 })
+            task.spawn(startBossFarm)
+        else
+            Fluent:Notify({ Title = "Boss Farm", Content = "Stopped boss farming", Duration = 3 })
+        end
+    end)
+
+    Tabs.Boss:AddButton({
+        Title = "Teleport to Boss",
+        Description = "Instant teleport to the active boss",
         Callback = function()
-            if game:GetService("Players").LocalPlayer:FindFirstChild("startevent") then
-                game:GetService("Players").LocalPlayer.startevent:FireServer("band", "Eye")
-                Fluent:Notify({
-                    Title = "Stats Saved",
-                    Content = "Your current stats have been saved!",
-                    Duration = 3
-                })
-            else
-                Fluent:Notify({
-                    Title = "Error",
-                    Content = "Game not loaded yet",
-                    Duration = 3
-                })
+            local player = game:GetService("Players").LocalPlayer
+            local character = player.Character
+            if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+            
+            for _, v in pairs(workspace:GetChildren()) do
+                if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
+                    character.HumanoidRootPart.CFrame = v.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
+                    Fluent:Notify({ Title = "Teleport", Content = "Teleported to boss: " .. v.Name, Duration = 2 })
+                    return
+                end
             end
+            Fluent:Notify({ Title = "Error", Content = "No active boss found!", Duration = 2 })
         end
-    })
-    
-    -- Refresh elements button
-    Tabs.Main:AddButton({
-        Title = "Refresh Elements",
-        Description = "Refresh the list of available bloodlines",
-        Callback = function()
-            local newElements = getElementNames()
-            ElementDropdown:SetValues(newElements)
-            Fluent:Notify({
-                Title = "Refresh",
-                Content = "Updated bloodline list",
-                Duration = 2
-            })
-        end
-    })
-    
-    -- Status display
-    Tabs.Main:AddParagraph({
-        Title = "Status",
-        Content = "Select your desired bloodlines and slots, then enable auto spin to start farming!"
     })
 end
 
@@ -281,7 +271,7 @@ Window:SelectTab(1)
 
 Fluent:Notify({
     Title = "Infinite Spin",
-    Content = "Script loaded successfully! Select your bloodlines and start spinning.",
+    Content = "Script loaded successfully with Boss Farm!",
     Duration = 5
 })
 
