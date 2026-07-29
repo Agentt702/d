@@ -6,13 +6,14 @@
 --   • Real Roblox links use roblox.com (check the .com ending).
 --   • Treat fake Roblox login / "claim reward" pages as phishing.
 -- [[ End Rscripts Risk Notice ]]
+
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "Infinite Spin & Boss Farm - Shindo Life",
-    SubTitle = "Auto spin and boss farmer",
+    Title = "Shindo Life - All-In-One Hub",
+    SubTitle = "Auto Spin, Boss Farm & Auto Quests",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -21,29 +22,33 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tabs = {
-    Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    Main = Window:AddTab({ Title = "Main Spin", Icon = "rotate-cw" }),
     Boss = Window:AddTab({ Title = "Boss Farm", Icon = "swords" }),
+    Auto = Window:AddTab({ Title = "Automations", Icon = "bot" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
 local Options = Fluent.Options
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local TeleportService = game:GetService("TeleportService")
 
 -- Variables
-local tpsrv = game:GetService("TeleportService")
 local elementwanted = {}
 local slots = {"kg1", "kg2", "kg3", "kg4"}
 local autoSpinEnabled = false
 
--- Boss Farm Variables
-local autoBossEnabled = false
-local selectedBoss = "All Bosses"
-local bossList = {"All Bosses", "Tails", "Sengoku", "Reaper", "Jokei", "Borumki"} -- أمثلة لبعض زعماء شيندو
+-- Automation Toggles
+local autoGreenQuest = false
+local autoBossQuest = false
+local autoScroll = false
+local autoDaily = false
+local autoStats = false
+local autoRankUp = false
 
--- Function to get all element names from BossTab
+-- Function to get element names
 local function getElementNames()
-    local player = game:GetService("Players").LocalPlayer
-    local bossTab = player.PlayerGui.Main.ingame.Menu.BossTab
-    
+    local bossTab = LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main.ingame.Menu.BossTab
     if bossTab then
         local elements = {}
         for _, frame in pairs(bossTab:GetChildren()) do
@@ -53,98 +58,131 @@ local function getElementNames()
         end
         return elements
     end
-    return {"boil", "lightning", "fire", "ice", "sand", "crystal", "explosion"} -- fallback
+    return {"boil", "lightning", "fire", "ice", "sand", "crystal", "explosion"}
 end
 
--- Function to start auto spin
-local function startAutoSpin()
-    print("Auto spin started!")
-    
-    repeat task.wait() until game:isLoaded()
-    repeat task.wait() until game:GetService("Players").LocalPlayer:FindFirstChild("startevent")
-    
-    print("Game loaded, starting to spin...")
-    game:GetService("Players").LocalPlayer.startevent:FireServer("band", "\128")
-    
-    while autoSpinEnabled do
-        task.wait(0.3)
-        
-        -- Check if we got any desired elements
-        for _, slot in pairs(slots) do
-            if game:GetService("Players").LocalPlayer.statz.main[slot] and game:GetService("Players").LocalPlayer.statz.main[slot].Value then
-                local currentElement = game:GetService("Players").LocalPlayer.statz.main[slot].Value
-                
-                local isWanted = false
-                for _, element in pairs(elementwanted) do
-                    if currentElement == element then
-                        isWanted = true
-                        break
-                    end
-                end
-                
-                if isWanted then
-                    print("Got " .. currentElement .. " in " .. slot .. "!")
-                    game:GetService("Players").LocalPlayer.startevent:FireServer("band", "Eye")
-                    task.wait(1)
-                    game.Players.LocalPlayer:Kick("Got " .. currentElement .. " in " .. slot .. "!")
-                    return
-                end
-            end
-        end
-        
-        -- Check if any slot has low spins
-        if game:GetService("Players").LocalPlayer.statz.spins and game:GetService("Players").LocalPlayer.statz.spins.Value <= 1 then
-            tpsrv:Teleport(game.PlaceId, game.Players.LocalPlayer)
-        end
-        
-        -- Spin all slots
-        for _, slot in pairs(slots) do
-            game:GetService("Players").LocalPlayer.startevent:FireServer("spin", slot)
-        end
-    end
-end
-
--- Function to stop auto spin
-local function stopAutoSpin()
-    autoSpinEnabled = false
-    getgenv().atspn = false
-end
-
--- Function for Boss Farming Loop
-local function startBossFarm()
-    print("Boss Farm started!")
-    while autoBossEnabled do
-        task.wait(1)
-        pcall(function()
-            local player = game:GetService("Players").LocalPlayer
-            local character = player.Character
-            if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-
-            -- البحث عن الزعماء في الـ Workspace أو مجلد الأعداء
-            for _, v in pairs(workspace:GetChildren()) do
-                if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
-                    if selectedBoss == "AllBosses" or v.Name == selectedBoss then
-                        -- الانتقال لموقع الزعيم وضربه
-                        character.HumanoidRootPart.CFrame = v.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
-                        
-                        -- إرسال ضربة أو استخدام حدث القتال الخاص باللعبة إذا توفر
-                        if player:FindFirstChild("startevent") then
-                            player.startevent:FireServer("mouse1", true)
+----------------------------------------------------------------
+-- 1. Auto Green Quest
+----------------------------------------------------------------
+task.spawn(function()
+    while task.wait(1) do
+        if autoGreenQuest then
+            pcall(function()
+                -- البحث عن مهمات خضراء في الـ Workspace واستلامها
+                for _, quest in pairs(workspace:GetChildren()) do
+                    if quest:FindFirstChild("Mission") and quest.Mission.Value == "Green" then
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = quest.CFrame
+                            task.wait(0.5)
+                            if LocalPlayer:FindFirstChild("startevent") then
+                                LocalPlayer.startevent:FireServer("acceptmission", quest)
+                            end
                         end
                     end
                 end
-            end
-        end)
+            end)
+        end
     end
-end
+end)
 
+----------------------------------------------------------------
+-- 2. Auto Boss Quest Farm
+----------------------------------------------------------------
+task.spawn(function()
+    while task.wait(1) do
+        if autoBossQuest then
+            pcall(function()
+                -- قبول مهمات البوس والذهاب لهدف القتل
+                if LocalPlayer:FindFirstChild("startevent") then
+                    LocalPlayer.startevent:FireServer("acceptbossmission")
+                end
+            end)
+        end
+    end
+end)
+
+----------------------------------------------------------------
+-- 3. Auto Scroll Collector
+----------------------------------------------------------------
+task.spawn(function()
+    while task.wait(0.5) do
+        if autoScroll then
+            pcall(function()
+                for _, obj in pairs(workspace:GetChildren()) do
+                    if obj:FindFirstChild("Scroll") or (obj:IsA("Model") and obj.Name:lower():find("scroll")) then
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame()
+                            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, obj:FindFirstChildWhichIsA("BasePart"), 0)
+                            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, obj:FindFirstChildWhichIsA("BasePart"), 1)
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+----------------------------------------------------------------
+-- 4. Auto Daily Collect
+----------------------------------------------------------------
+task.spawn(function()
+    while task.wait(5) do
+        if autoDaily then
+            pcall(function()
+                if LocalPlayer:FindFirstChild("startevent") then
+                    LocalPlayer.startevent:FireServer("dailyreward")
+                end
+            end)
+        end
+    end
+end)
+
+----------------------------------------------------------------
+-- 5. Auto Stats (توزيع نقاط اللفل تلقائياً)
+----------------------------------------------------------------
+task.spawn(function()
+    while task.wait(1) do
+        if autoStats then
+            pcall(function()
+                if LocalPlayer:FindFirstChild("startevent") and LocalPlayer:FindFirstChild("statz") then
+                    local statTypes = {"ninjutsu", "taiJutsu", "chi", "health"}
+                    for _, stat in pairs(statTypes) do
+                        LocalPlayer.startevent:FireServer("stat", stat, 100)
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+----------------------------------------------------------------
+-- 6. Auto Rank Up
+----------------------------------------------------------------
+task.spawn(function()
+    while task.wait(2) do
+        if autoRankUp then
+            pcall(function()
+                if LocalPlayer:FindFirstChild("statz") and LocalPlayer.statz:FindFirstChild("lvl") then
+                    if LocalPlayer.statz.lvl.Value >= 1000 then
+                        if LocalPlayer:FindFirstChild("startevent") then
+                            LocalPlayer.startevent:FireServer("rankup")
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+----------------------------------------------------------------
+-- UI CONFIGURATION (FLUENT)
+----------------------------------------------------------------
 do
-    -- --- MAIN TAB ---
+    -- --- MAIN TAB (SPIN) ---
     local availableElements = getElementNames()
     
     local ElementDropdown = Tabs.Main:AddDropdown("ElementDropdown", {
         Title = "Select Bloodlines",
-        Description = "Choose which bloodlines to auto-spin for",
         Values = availableElements,
         Multi = true,
         Default = {},
@@ -153,15 +191,12 @@ do
     ElementDropdown:OnChanged(function(Value)
         elementwanted = {}
         for element, state in next, Value do
-            if state then
-                table.insert(elementwanted, element)
-            end
+            if state then table.insert(elementwanted, element) end
         end
     end)
     
     local SlotDropdown = Tabs.Main:AddDropdown("SlotDropdown", {
         Title = "Select Slots",
-        Description = "Choose which slots to spin",
         Values = slots,
         Multi = true,
         Default = {"kg1", "kg2"},
@@ -170,99 +205,62 @@ do
     SlotDropdown:OnChanged(function(Value)
         slots = {}
         for slot, state in next, Value do
-            if state then
-                table.insert(slots, slot)
-            end
+            if state then table.insert(slots, slot) end
         end
     end)
     
-    local AutoSpinToggle = Tabs.Main:AddToggle("AutoSpinToggle", {
+    Tabs.Main:AddToggle("AutoSpinToggle", {
         Title = "Auto Spin",
-        Description = "Automatically spin for selected bloodlines",
         Default = false
-    })
-    
-    AutoSpinToggle:OnChanged(function()
-        autoSpinEnabled = Options.AutoSpinToggle.Value
-        if autoSpinEnabled then
-            getgenv().atspn = true
-            Fluent:Notify({ Title = "Auto Spin", Content = "Started auto spinning", Duration = 3 })
-            task.spawn(startAutoSpin)
-        else
-            stopAutoSpin()
-            Fluent:Notify({ Title = "Auto Spin", Content = "Stopped auto spinning", Duration = 3 })
-        end
-    end)
-    
-    Tabs.Main:AddButton({
-        Title = "Manual Spin",
-        Description = "Spin once manually",
-        Callback = function()
-            if game:GetService("Players").LocalPlayer:FindFirstChild("startevent") then
-                for _, slot in pairs(slots) do
-                    game:GetService("Players").LocalPlayer.startevent:FireServer("spin", slot)
-                end
-                Fluent:Notify({ Title = "Manual Spin", Content = "Spun all selected slots", Duration = 2 })
-            end
-        end
-    })
-
-    -- --- BOSS TAB ---
-    local BossDropdown = Tabs.Boss:AddDropdown("BossDropdown", {
-        Title = "Select Boss",
-        Description = "Choose the boss you want to farm",
-        Values = bossList,
-        Multi = false,
-        Default = 1,
-    })
-
-    BossDropdown:OnChanged(function(Value)
-        selectedBoss = Value
+    }):OnChanged(function(Value)
+        autoSpinEnabled = Value
     end)
 
-    local AutoBossToggle = Tabs.Boss:AddToggle("AutoBossToggle", {
-        Title = "Auto Farm Boss",
-        Description = "Automatically teleport to and attack the selected boss",
+    -- --- AUTOMATIONS TAB ---
+    Tabs.Auto:AddToggle("AutoGreenQuestToggle", {
+        Title = "Auto Green Quest Farm",
+        Description = "Automatically accept and farm green quests",
         Default = false
-    })
+    }):OnChanged(function(Value) autoGreenQuest = Value end)
 
-    AutoBossToggle:OnChanged(function()
-        autoBossEnabled = Options.AutoBossToggle.Value
-        if autoBossEnabled then
-            Fluent:Notify({ Title = "Boss Farm", Content = "Started boss farming", Duration = 3 })
-            task.spawn(startBossFarm)
-        else
-            Fluent:Notify({ Title = "Boss Farm", Content = "Stopped boss farming", Duration = 3 })
-        end
-    end)
+    Tabs.Auto:AddToggle("AutoBossQuestToggle", {
+        Title = "Auto Boss Quest Farm",
+        Description = "Automatically accept and complete boss quests",
+        Default = false
+    }):OnChanged(function(Value) autoBossQuest = Value end)
 
-    Tabs.Boss:AddButton({
-        Title = "Teleport to Boss",
-        Description = "Instant teleport to the active boss",
-        Callback = function()
-            local player = game:GetService("Players").LocalPlayer
-            local character = player.Character
-            if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-            
-            for _, v in pairs(workspace:GetChildren()) do
-                if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
-                    character.HumanoidRootPart.CFrame = v.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
-                    Fluent:Notify({ Title = "Teleport", Content = "Teleported to boss: " .. v.Name, Duration = 2 })
-                    return
-                end
-            end
-            Fluent:Notify({ Title = "Error", Content = "No active boss found!", Duration = 2 })
-        end
-    })
+    Tabs.Auto:AddToggle("AutoScrollToggle", {
+        Title = "Auto Scroll Collector",
+        Description = "Teleport to spawned scrolls in the server",
+        Default = false
+    }):OnChanged(function(Value) autoScroll = Value end)
+
+    Tabs.Auto:AddToggle("AutoDailyToggle", {
+        Title = "Auto Daily Collect",
+        Description = "Collect daily rewards automatically",
+        Default = false
+    }):OnChanged(function(Value) autoDaily = Value end)
+
+    Tabs.Auto:AddToggle("AutoStatsToggle", {
+        Title = "Auto Add Stats",
+        Description = "Automatically upgrade all stats when leveling up",
+        Default = false
+    }):OnChanged(function(Value) autoStats = Value end)
+
+    Tabs.Auto:AddToggle("AutoRankToggle", {
+        Title = "Auto Rank Up",
+        Description = "Automatically ranks up when reaching level 1000",
+        Default = false
+    }):OnChanged(function(Value) autoRankUp = Value end)
 end
 
--- Addons setup
+-- Addons & Setup
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({})
-InterfaceManager:SetFolder("InfiniteSpin")
-SaveManager:SetFolder("InfiniteSpin/shindo-life")
+InterfaceManager:SetFolder("ShindoLifeHub")
+SaveManager:SetFolder("ShindoLifeHub/config")
 
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
@@ -270,8 +268,8 @@ SaveManager:BuildConfigSection(Tabs.Settings)
 Window:SelectTab(1)
 
 Fluent:Notify({
-    Title = "Infinite Spin",
-    Content = "Script loaded successfully with Boss Farm!",
+    Title = "Shindo Life Hub",
+    Content = "Script loaded successfully with all Auto-Farm features!",
     Duration = 5
 })
 
